@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_colorpicker/flutter_colorpicker.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'app_localizations.dart';
 import 'home.dart';
 
@@ -150,24 +151,22 @@ class _SettingsPageState extends State<SettingsPage> {
     double size = fontSize ?? _fontSize;
     Color textColor = color ?? _textColor;
     
-    String fontFamily;
-    switch (_selectedFont) {
-      case 'Amiri Quran':
-        fontFamily = 'AmiriQuran';
-        break;
-      case 'Amiri':
-        fontFamily = 'Amiri';
-        break;
-      case 'Noto Naskh Arabic':
-        fontFamily = 'NotoNaskhArabic';
-        break;
-      case 'Scheherazade New':
-        fontFamily = 'ScheherazadeNew';
-        break;
-      default:
-        fontFamily = 'AmiriQuran';
+    try {
+      switch (_selectedFont) {
+        case 'Amiri Quran':
+          return GoogleFonts.amiriQuran(fontSize: size, color: textColor);
+        case 'Amiri':
+          return GoogleFonts.amiri(fontSize: size, color: textColor);
+        case 'Noto Naskh Arabic':
+          return GoogleFonts.notoNaskhArabic(fontSize: size, color: textColor);
+        case 'Scheherazade New':
+          return GoogleFonts.scheherazadeNew(fontSize: size, color: textColor);
+        default:
+          return GoogleFonts.amiriQuran(fontSize: size, color: textColor);
+      }
+    } catch (e) {
+      return TextStyle(fontSize: size, color: textColor);
     }
-    return TextStyle(fontFamily: fontFamily, fontSize: size, color: textColor);
   }
 
   Widget _buildSectionTitle(String title, IconData icon) {

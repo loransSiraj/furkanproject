@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:audio_session/audio_session.dart';
 import 'package:scrollable_positioned_list/scrollable_positioned_list.dart';
@@ -1311,24 +1312,22 @@ class _HomePageState extends State<HomePage> {
     // ارتفاع سطر افتراضي أعلى للحركات العربية
     double lineHeight = height ?? 1.8;
     
-    String fontFamily;
-    switch (_selectedFont) {
-      case 'Amiri Quran':
-        fontFamily = 'AmiriQuran';
-        break;
-      case 'Amiri':
-        fontFamily = 'Amiri';
-        break;
-      case 'Noto Naskh Arabic':
-        fontFamily = 'NotoNaskhArabic';
-        break;
-      case 'Scheherazade New':
-        fontFamily = 'ScheherazadeNew';
-        break;
-      default:
-        fontFamily = 'AmiriQuran';
+    try {
+      switch (_selectedFont) {
+        case 'Amiri Quran':
+          return GoogleFonts.amiriQuran(fontSize: size, color: textColor, fontWeight: fontWeight, height: lineHeight);
+        case 'Amiri':
+          return GoogleFonts.amiri(fontSize: size, color: textColor, fontWeight: fontWeight, height: lineHeight);
+        case 'Noto Naskh Arabic':
+          return GoogleFonts.notoNaskhArabic(fontSize: size, color: textColor, fontWeight: fontWeight, height: lineHeight);
+        case 'Scheherazade New':
+          return GoogleFonts.scheherazadeNew(fontSize: size, color: textColor, fontWeight: fontWeight, height: lineHeight);
+        default:
+          return GoogleFonts.amiriQuran(fontSize: size, color: textColor, fontWeight: fontWeight, height: lineHeight);
+      }
+    } catch (e) {
+      return TextStyle(fontSize: size, color: textColor, fontWeight: fontWeight, height: lineHeight);
     }
-    return TextStyle(fontFamily: fontFamily, fontSize: size, color: textColor, fontWeight: fontWeight, height: lineHeight);
   }
 
   void _openIndexPage() {
