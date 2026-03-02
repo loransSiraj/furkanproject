@@ -7,14 +7,16 @@ import UIKit
     _ application: UIApplication,
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
   ) -> Bool {
+    GeneratedPluginRegistrant.register(with: self)
+
     if #available(iOS 10.0, *) {
       UNUserNotificationCenter.current().delegate = self as UNUserNotificationCenterDelegate
     }
 
-    let controller = window?.rootViewController as! FlutterViewController
+    let registrar = self.registrar(forPlugin: "WakelockPlugin")!
     let wakelockChannel = FlutterMethodChannel(
       name: "com.furqan.quran/wakelock",
-      binaryMessenger: controller.binaryMessenger
+      binaryMessenger: registrar.messenger()
     )
     wakelockChannel.setMethodCallHandler { (call, result) in
       switch call.method {
@@ -29,7 +31,6 @@ import UIKit
       }
     }
 
-    GeneratedPluginRegistrant.register(with: self)
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
   }
 }
