@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:audio_session/audio_session.dart';
 import 'package:scrollable_positioned_list/scrollable_positioned_list.dart';
@@ -1320,22 +1319,24 @@ class _HomePageState extends State<HomePage> {
     // ارتفاع سطر افتراضي أعلى للحركات العربية
     double lineHeight = height ?? 1.8;
     
-    try {
-      switch (_selectedFont) {
-        case 'Amiri Quran':
-          return GoogleFonts.amiriQuran(fontSize: size, color: textColor, fontWeight: fontWeight, height: lineHeight);
-        case 'Amiri':
-          return GoogleFonts.amiri(fontSize: size, color: textColor, fontWeight: fontWeight, height: lineHeight);
-        case 'Noto Naskh Arabic':
-          return GoogleFonts.notoNaskhArabic(fontSize: size, color: textColor, fontWeight: fontWeight, height: lineHeight);
-        case 'Scheherazade New':
-          return GoogleFonts.scheherazadeNew(fontSize: size, color: textColor, fontWeight: fontWeight, height: lineHeight);
-        default:
-          return GoogleFonts.amiriQuran(fontSize: size, color: textColor, fontWeight: fontWeight, height: lineHeight);
-      }
-    } catch (e) {
-      return TextStyle(fontSize: size, color: textColor, fontWeight: fontWeight, height: lineHeight);
+    String fontFamily;
+    switch (_selectedFont) {
+      case 'Amiri Quran':
+        fontFamily = 'AmiriQuran';
+        break;
+      case 'Amiri':
+        fontFamily = 'Amiri';
+        break;
+      case 'Noto Naskh Arabic':
+        fontFamily = 'NotoNaskhArabic';
+        break;
+      case 'Scheherazade New':
+        fontFamily = 'ScheherazadeNew';
+        break;
+      default:
+        fontFamily = 'AmiriQuran';
     }
+    return TextStyle(fontFamily: fontFamily, fontSize: size, color: textColor, fontWeight: fontWeight, height: lineHeight);
   }
 
   void _openIndexPage() {
@@ -1761,13 +1762,18 @@ class _HomePageState extends State<HomePage> {
     _playAya(_currentSuraNo, _currentAyaNo);
   }
 
-  // لوحة التحكم السفلية
+  // لوحة التحكم السفلية - زران: صوت + تمرير تلقائي
   Widget _buildBottomControlPanel() {
     final bottomPadding = MediaQuery.of(context).padding.bottom;
-    
+    final hasAudio = _playingAyaKey != null;
+    final bool showExpanded = _showAutoScrollPanel;
+
+    double panelHeight = 65.0;
+    if (showExpanded) panelHeight = 120.0;
+
     return AnimatedContainer(
       duration: Duration(milliseconds: 300),
-      height: (_showAutoScrollPanel ? 120.0 : 65) + bottomPadding,
+      height: panelHeight + bottomPadding,
       padding: EdgeInsets.only(bottom: bottomPadding),
       decoration: BoxDecoration(
         color: _backgroundColor,
@@ -1794,139 +1800,135 @@ class _HomePageState extends State<HomePage> {
               ),
             ),
           ),
-          // الصف الرئيسي: سرعة التمرير + تشغيل/إيقاف تمرير
           Container(
             height: 52,
             padding: EdgeInsets.symmetric(horizontal: 16),
             child: Row(
               children: [
-                IconButton(
-                  icon: Icon(
-                    _showAutoScrollPanel ? Icons.keyboard_arrow_down : Icons.keyboard_arrow_up,
-                    color: _accentColor,
-                  ),
-                  onPressed: () => setState(() => _showAutoScrollPanel = !_showAutoScrollPanel),
-                ),
+                // زر الصوت
                 Expanded(
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      GestureDetector(
-                        onTap: () {
-                          if (_autoScrollSpeed > 0.5) _updateAutoScrollSpeed(_autoScrollSpeed - 0.5);
-                        },
-                        child: Container(
-                          padding: EdgeInsets.all(8),
-                          decoration: BoxDecoration(
-                            color: _accentColor.withOpacity(0.1),
-                            borderRadius: BorderRadius.circular(8),
+                  child: GestureDetector(
+                    onTap: () {
+                      if (hasAudio || _isPlayingAudio) {
+                        _stopAudio();
+                      } else {
+                        if (_autoScrollEnabled) _stopAutoScroll();
+                        _startAudioFromCurrentPosition();
+                      }
+                    },
+                    child: Container(
+                      height: 44,
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: hasAudio
+                              ? [Colors.orange[400]!, Colors.orange[600]!]
+                              : [Colors.blue[400]!, Colors.blue[600]!],
+                        ),
+                        borderRadius: BorderRadius.circular(22),
+                        boxShadow: [
+                          BoxShadow(
+                            color: (hasAudio ? Colors.orange : Colors.blue).withOpacity(0.3),
+                            blurRadius: 8,
+                            offset: Offset(0, 3),
                           ),
-                          child: Icon(Icons.remove, color: _accentColor, size: 20),
-                        ),
+                        ],
                       ),
-                      SizedBox(width: 16),
-                      Container(
-                        padding: EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-                        decoration: BoxDecoration(
-                          color: _autoScrollEnabled
-                              ? Colors.green.withOpacity(0.15)
-                              : _accentColor.withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                        child: Text(
-                          '${_autoScrollSpeed.toStringAsFixed(1)}x',
-                          style: TextStyle(
-                            color: _autoScrollEnabled ? Colors.green[700] : _accentColor,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 16,
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            hasAudio ? Icons.stop_rounded : Icons.headphones_rounded,
+                            color: Colors.white,
+                            size: 22,
                           ),
-                        ),
-                      ),
-                      SizedBox(width: 16),
-                      GestureDetector(
-                        onTap: () {
-                          if (_autoScrollSpeed < 5) _updateAutoScrollSpeed(_autoScrollSpeed + 0.5);
-                        },
-                        child: Container(
-                          padding: EdgeInsets.all(8),
-                          decoration: BoxDecoration(
-                            color: _accentColor.withOpacity(0.1),
-                            borderRadius: BorderRadius.circular(8),
+                          SizedBox(width: 6),
+                          Text(
+                            hasAudio ? AppLocalizations.tr('stop', _appLanguage) : AppLocalizations.tr('audio', _appLanguage),
+                            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
                           ),
-                          child: Icon(Icons.add, color: _accentColor, size: 20),
-                        ),
+                        ],
                       ),
-                    ],
+                    ),
                   ),
                 ),
-                GestureDetector(
-                  onTap: _toggleAutoScroll,
-                  child: Container(
-                    width: 48,
-                    height: 48,
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: _autoScrollEnabled
-                            ? [Colors.red[400]!, Colors.red[600]!]
-                            : [Colors.green[400]!, Colors.green[600]!],
-                      ),
-                      shape: BoxShape.circle,
-                      boxShadow: [
-                        BoxShadow(
-                          color: (_autoScrollEnabled ? Colors.red : Colors.green).withOpacity(0.4),
-                          blurRadius: 10,
-                          offset: Offset(0, 3),
+                SizedBox(width: 12),
+                // زر التمرير التلقائي
+                Expanded(
+                  child: GestureDetector(
+                    onTap: () {
+                      if (_autoScrollEnabled) {
+                        _stopAutoScroll();
+                      } else {
+                        if (hasAudio) _stopAudio();
+                        _startAutoScroll();
+                      }
+                    },
+                    child: Container(
+                      height: 44,
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: _autoScrollEnabled
+                              ? [Colors.red[400]!, Colors.red[600]!]
+                              : [Colors.green[400]!, Colors.green[600]!],
                         ),
-                      ],
-                    ),
-                    child: Icon(
-                      _autoScrollEnabled ? Icons.pause_rounded : Icons.play_arrow_rounded,
-                      color: Colors.white,
-                      size: 26,
+                        borderRadius: BorderRadius.circular(22),
+                        boxShadow: [
+                          BoxShadow(
+                            color: (_autoScrollEnabled ? Colors.red : Colors.green).withOpacity(0.3),
+                            blurRadius: 8,
+                            offset: Offset(0, 3),
+                          ),
+                        ],
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            _autoScrollEnabled ? Icons.pause_rounded : Icons.arrow_downward_rounded,
+                            color: Colors.white,
+                            size: 22,
+                          ),
+                          SizedBox(width: 6),
+                          Text(
+                            _autoScrollEnabled ? AppLocalizations.tr('stop', _appLanguage) : AppLocalizations.tr('scroll', _appLanguage),
+                            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 ),
               ],
             ),
           ),
-          // اللوحة المنسدلة: أدوات القارئ الصوتي
-          if (_showAutoScrollPanel)
-            Expanded(child: _buildAudioControls()),
+          if (showExpanded)
+            Expanded(child: hasAudio ? _buildAudioSubControls() : _buildScrollSpeedControls()),
         ],
       ),
     );
   }
 
-  Widget _buildAudioControls() {
-    final hasAudio = _playingAyaKey != null;
+  // أدوات التحكم بالصوت عند التوسيع
+  Widget _buildAudioSubControls() {
     return Padding(
       padding: EdgeInsets.symmetric(horizontal: 16, vertical: 4),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
         children: [
-          _ctrlBtn(Icons.stop_rounded,
-              hasAudio ? Colors.red[400]! : Colors.grey[400]!,
-              hasAudio ? _stopAudio : () {}),
-          _ctrlBtn(Icons.skip_previous_rounded,
-              hasAudio ? _accentColor : Colors.grey[400]!,
-              hasAudio ? _playPreviousAya : () {}),
-          // تشغيل / إيقاف مؤقت (يبدأ القراءة من الآية الحالية إذا لم يكن هناك صوت)
+          _ctrlBtn(Icons.skip_previous_rounded, _accentColor, _playPreviousAya),
           GestureDetector(
-            onTap: hasAudio ? _pauseResumeAudio : _startAudioFromCurrentPosition,
+            onTap: _pauseResumeAudio,
             child: Container(
               width: 44,
               height: 44,
-              decoration: BoxDecoration(color: Colors.green, shape: BoxShape.circle),
+              decoration: BoxDecoration(color: Colors.blue, shape: BoxShape.circle),
               child: Icon(
-                hasAudio && _isPlayingAudio ? Icons.pause_rounded : Icons.play_arrow_rounded,
+                _isPlayingAudio ? Icons.pause_rounded : Icons.play_arrow_rounded,
                 color: Colors.white, size: 24,
               ),
             ),
           ),
-          _ctrlBtn(Icons.skip_next_rounded,
-              hasAudio ? _accentColor : Colors.grey[400]!,
-              hasAudio ? _playNextAya : () {}),
-          // وضع التشغيل
+          _ctrlBtn(Icons.skip_next_rounded, _accentColor, _playNextAya),
           GestureDetector(
             onTap: _cyclePlayMode,
             child: Container(
@@ -1948,6 +1950,63 @@ class _HomePageState extends State<HomePage> {
                       color: _playMode == 2 ? Colors.orange : (_playMode == 1 ? Colors.green : _accentColor))),
                 ],
               ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // أدوات التحكم بسرعة التمرير عند التوسيع
+  Widget _buildScrollSpeedControls() {
+    return Padding(
+      padding: EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          GestureDetector(
+            onTap: () {
+              if (_autoScrollSpeed > 0.5) _updateAutoScrollSpeed(_autoScrollSpeed - 0.5);
+            },
+            child: Container(
+              padding: EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: _accentColor.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Icon(Icons.remove, color: _accentColor, size: 20),
+            ),
+          ),
+          SizedBox(width: 20),
+          Container(
+            padding: EdgeInsets.symmetric(horizontal: 20, vertical: 6),
+            decoration: BoxDecoration(
+              color: _autoScrollEnabled
+                  ? Colors.green.withOpacity(0.15)
+                  : _accentColor.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Text(
+              '${_autoScrollSpeed.toStringAsFixed(1)}x',
+              style: TextStyle(
+                color: _autoScrollEnabled ? Colors.green[700] : _accentColor,
+                fontWeight: FontWeight.bold,
+                fontSize: 16,
+              ),
+            ),
+          ),
+          SizedBox(width: 20),
+          GestureDetector(
+            onTap: () {
+              if (_autoScrollSpeed < 5) _updateAutoScrollSpeed(_autoScrollSpeed + 0.5);
+            },
+            child: Container(
+              padding: EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: _accentColor.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Icon(Icons.add, color: _accentColor, size: 20),
             ),
           ),
         ],

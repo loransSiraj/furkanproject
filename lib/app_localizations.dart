@@ -531,6 +531,26 @@ class AppLocalizations {
       'tr': 'Devre dışı',
       'sq': 'Çaktivizuar',
     },
+
+    // ========== لوحة التحكم السفلية ==========
+    'audio': {
+      'ar': 'صوت',
+      'en': 'Audio',
+      'tr': 'Ses',
+      'sq': 'Audio',
+    },
+    'scroll': {
+      'ar': 'تمرير',
+      'en': 'Scroll',
+      'tr': 'Kaydır',
+      'sq': 'Lëviz',
+    },
+    'stop': {
+      'ar': 'إيقاف',
+      'en': 'Stop',
+      'tr': 'Durdur',
+      'sq': 'Ndalo',
+    },
   };
 
   static String tr(String key, String lang) {
