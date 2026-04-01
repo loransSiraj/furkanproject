@@ -99,6 +99,7 @@ class _HomePageState extends State<HomePage> {
   bool _autoScrollEnabled = false;
   double _autoScrollSpeed = 1.0;
   bool _userIsTouching = false;
+  Timer? _autoScrollTimer;
 
   // مؤشر القراءة والمرجعيات
   String? _selectedAyaKey; // "suraNo-ayaNo" للآية المحددة
@@ -198,6 +199,9 @@ class _HomePageState extends State<HomePage> {
   @override
   void dispose() {
     _autoScrollEnabled = false;
+    _autoScrollTimer?.cancel();
+    _autoScrollTimer = null;
+    _audioSubscription?.cancel();
     _audioPlayer.dispose();
     _wakelockChannel.invokeMethod('disable');
     _saveLastPosition();
@@ -209,7 +213,7 @@ class _HomePageState extends State<HomePage> {
   
   Future<void> _loadSettings() async {
     final prefs = await SharedPreferences.getInstance();
-    
+    if (!mounted) return;
     setState(() {
       _backgroundColor = Color(prefs.getInt('backgroundColor') ?? 0xFFFFFBF0);
       _textColor = Color(prefs.getInt('textColor') ?? 0xFF2C1810);
@@ -263,7 +267,7 @@ class _HomePageState extends State<HomePage> {
   // ========== نظام الترجمة ==========
 
   Future<void> _loadTranslation(String langCode) async {
-    if (_translationLoading) return;
+    if (_translationLoading || !mounted) return;
     setState(() => _translationLoading = true);
 
     final Map<String, String> fileMap = {
@@ -274,6 +278,7 @@ class _HomePageState extends State<HomePage> {
 
     final filePath = fileMap[langCode];
     if (filePath == null) {
+      if (!mounted) return;
       setState(() {
         _translationData = {};
         _translationLoading = false;
@@ -294,12 +299,14 @@ class _HomePageState extends State<HomePage> {
         translations['$chapter-$verse'] = text;
       }
 
+      if (!mounted) return;
       setState(() {
         _translationData = translations;
         _translationLoading = false;
       });
     } catch (e) {
       debugPrint('خطأ في تحميل الترجمة: $e');
+      if (!mounted) return;
       setState(() {
         _translationData = {};
         _translationLoading = false;
@@ -309,8 +316,11 @@ class _HomePageState extends State<HomePage> {
 
   // ========== نظام تشغيل الصوت ==========
 
+  StreamSubscription<PlayerState>? _audioSubscription;
+
   void _setupAudioListeners() {
-    _audioPlayer.playerStateStream.listen((state) {
+    _audioSubscription = _audioPlayer.playerStateStream.listen((state) {
+      if (!mounted) return;
       if (state.processingState == ProcessingState.completed) {
         if (_playMode == 2) {
           _replayCurrentAya();
@@ -394,6 +404,7 @@ class _HomePageState extends State<HomePage> {
 
   Future<void> _stopAudio() async {
     await _audioPlayer.stop();
+    if (!mounted) return;
     setState(() {
       _isPlayingAudio = false;
       _playingAyaKey = null;
@@ -404,9 +415,11 @@ class _HomePageState extends State<HomePage> {
   Future<void> _pauseResumeAudio() async {
     if (_audioPlayer.playing) {
       await _audioPlayer.pause();
+      if (!mounted) return;
       setState(() => _isPlayingAudio = false);
     } else {
       await _audioPlayer.play();
+      if (!mounted) return;
       setState(() => _isPlayingAudio = true);
     }
   }
@@ -608,6 +621,7 @@ class _HomePageState extends State<HomePage> {
         }
       }
 
+      if (!mounted) return;
       setState(() {
         _items = items;
         _groupedBySura = groupedBySura;
@@ -624,6 +638,7 @@ class _HomePageState extends State<HomePage> {
       _loadLastPosition();
     } catch (e) {
       print('خطأ في تحميل البيانات: $e');
+      if (!mounted) return;
       setState(() => _isLoading = false);
     }
   }
@@ -931,52 +946,65 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  // ========== نظام القراءة التلقائية (تدريجي سلس) ==========
+  // ========== نظام القراءة التلقائية (باستخدام Timer) ==========
   
   void _startAutoScroll() {
     if (_autoScrollEnabled) return;
+    if (!mounted) return;
+    
     setState(() => _autoScrollEnabled = true);
     _setWakeLock(true);
-    _continueAutoScroll();
+    
+    // حساب الفترة بناءً على السرعة
+    final interval = _calculateScrollInterval();
+    
+    _autoScrollTimer?.cancel();
+    _autoScrollTimer = Timer.periodic(interval, (_) {
+      _performScrollStep();
+    });
   }
   
-  void _continueAutoScroll() async {
-    if (!_autoScrollEnabled) return;
-    
-    // إذا كان المستخدم يلمس الشاشة، انتظر قليلاً ثم حاول مرة أخرى
-    if (_userIsTouching) {
-      await Future.delayed(Duration(milliseconds: 100));
-      if (_autoScrollEnabled && mounted) {
-        _continueAutoScroll();
-      }
+  Duration _calculateScrollInterval() {
+    // كلما زادت السرعة، قلت الفترة
+    int ms = (100 / _autoScrollSpeed).round();
+    if (ms < 16) ms = 16; // حد أدنى ~60fps
+    if (ms > 500) ms = 500; // حد أقصى
+    return Duration(milliseconds: ms);
+  }
+  
+  void _performScrollStep() {
+    if (!mounted || !_autoScrollEnabled) {
+      _autoScrollTimer?.cancel();
+      _autoScrollTimer = null;
       return;
     }
     
-    double scrollAmount = 50;
-    double pixelsPerSecond = _autoScrollSpeed * 30;
-    int durationMs = (scrollAmount / pixelsPerSecond * 1000).round();
-    if (durationMs < 50) durationMs = 50;
+    // إذا كان المستخدم يلمس الشاشة، تخطى هذه الخطوة
+    if (_userIsTouching) return;
+    
+    // التحقق من أن الـ controller متصل
+    if (!_itemScrollController.isAttached) return;
     
     try {
-      await _scrollOffsetController.animateScroll(
-        offset: scrollAmount,
-        duration: Duration(milliseconds: durationMs),
+      // تمرير صغير بدون animation (أسرع وأسلم)
+      _scrollOffsetController.animateScroll(
+        offset: 2.0 * _autoScrollSpeed,
+        duration: Duration(milliseconds: 16),
         curve: Curves.linear,
       );
-      
-      if (_autoScrollEnabled && mounted) {
-        _continueAutoScroll();
-      }
     } catch (e) {
-      // تجاهل الخطأ والمتابعة
-      if (_autoScrollEnabled && mounted) {
-        await Future.delayed(Duration(milliseconds: 100));
-        _continueAutoScroll();
-      }
+      // تجاهل الأخطاء
     }
   }
   
   void _stopAutoScroll() {
+    _autoScrollTimer?.cancel();
+    _autoScrollTimer = null;
+    
+    if (!mounted) {
+      _autoScrollEnabled = false;
+      return;
+    }
     setState(() => _autoScrollEnabled = false);
     _setWakeLock(false);
   }
@@ -992,6 +1020,15 @@ class _HomePageState extends State<HomePage> {
   void _updateAutoScrollSpeed(double newSpeed) {
     setState(() => _autoScrollSpeed = newSpeed);
     _saveSettings();
+    
+    // إعادة تشغيل الـ timer بالسرعة الجديدة
+    if (_autoScrollEnabled && _autoScrollTimer != null) {
+      _autoScrollTimer?.cancel();
+      final interval = _calculateScrollInterval();
+      _autoScrollTimer = Timer.periodic(interval, (_) {
+        _performScrollStep();
+      });
+    }
   }
 
   // ========== مؤشر القراءة والخيارات ==========
@@ -1773,6 +1810,7 @@ class _HomePageState extends State<HomePage> {
       curve: Curves.easeOut,
       height: panelHeight + bottomPadding,
       padding: EdgeInsets.only(bottom: bottomPadding),
+      clipBehavior: Clip.hardEdge,
       decoration: BoxDecoration(
         color: _backgroundColor,
         boxShadow: [
@@ -1783,63 +1821,72 @@ class _HomePageState extends State<HomePage> {
           ),
         ],
       ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Divider(height: 1, thickness: 0.5, color: _accentColor.withOpacity(0.15)),
-          // الصف الرئيسي: زران
-          Padding(
-            padding: EdgeInsets.fromLTRB(16, 10, 16, 4),
-            child: Row(
-              children: [
-                // زر الصوت
-                Expanded(
-                  child: _buildMainButton(
-                    active: hasAudio,
-                    activeColor: _accentColor,
-                    inactiveIcon: Icons.headphones_rounded,
-                    activeIcon: Icons.graphic_eq_rounded,
-                    label: hasAudio
-                        ? AppLocalizations.tr('audio', _appLanguage)
-                        : AppLocalizations.tr('audio', _appLanguage),
-                    onTap: () {
-                      if (hasAudio) {
-                        _stopAudio();
-                      } else {
-                        if (_autoScrollEnabled) _stopAutoScroll();
-                        _startAudioFromCurrentPosition();
-                      }
-                    },
+      child: SingleChildScrollView(
+        physics: NeverScrollableScrollPhysics(),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Divider(height: 1, thickness: 0.5, color: _accentColor.withOpacity(0.15)),
+            // الصف الرئيسي: زران
+            Padding(
+              padding: EdgeInsets.fromLTRB(16, 10, 16, 4),
+              child: Row(
+                children: [
+                  // زر الصوت
+                  Expanded(
+                    child: _buildMainButton(
+                      active: hasAudio,
+                      activeColor: _accentColor,
+                      inactiveIcon: Icons.headphones_rounded,
+                      activeIcon: Icons.graphic_eq_rounded,
+                      label: hasAudio
+                          ? AppLocalizations.tr('audio', _appLanguage)
+                          : AppLocalizations.tr('audio', _appLanguage),
+                      onTap: () {
+                        if (hasAudio) {
+                          _stopAudio();
+                        } else {
+                          if (_autoScrollEnabled) _stopAutoScroll();
+                          _startAudioFromCurrentPosition();
+                        }
+                      },
+                    ),
                   ),
-                ),
-                SizedBox(width: 10),
-                // زر التمرير
-                Expanded(
-                  child: _buildMainButton(
-                    active: _autoScrollEnabled,
-                    activeColor: Colors.teal,
-                    inactiveIcon: Icons.swap_vert_rounded,
-                    activeIcon: Icons.swap_vert_rounded,
-                    label: _autoScrollEnabled
-                        ? AppLocalizations.tr('scroll', _appLanguage)
-                        : AppLocalizations.tr('scroll', _appLanguage),
-                    onTap: () {
-                      if (_autoScrollEnabled) {
-                        _stopAutoScroll();
-                      } else {
-                        if (hasAudio) _stopAudio();
-                        _startAutoScroll();
-                      }
-                    },
+                  SizedBox(width: 10),
+                  // زر التمرير
+                  Expanded(
+                    child: _buildMainButton(
+                      active: _autoScrollEnabled,
+                      activeColor: Colors.teal,
+                      inactiveIcon: Icons.swap_vert_rounded,
+                      activeIcon: Icons.swap_vert_rounded,
+                      label: _autoScrollEnabled
+                          ? AppLocalizations.tr('scroll', _appLanguage)
+                          : AppLocalizations.tr('scroll', _appLanguage),
+                      onTap: () {
+                        if (_autoScrollEnabled) {
+                          _stopAutoScroll();
+                        } else {
+                          if (hasAudio) _stopAudio();
+                          _startAutoScroll();
+                        }
+                      },
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
-          // الأدوات الفرعية
-          if (hasAudio) _buildAudioSubControls(),
-          if (!hasAudio && _autoScrollEnabled) _buildScrollSubControls(),
-        ],
+            // الأدوات الفرعية
+            AnimatedCrossFade(
+              duration: Duration(milliseconds: 200),
+              crossFadeState: hasAudio
+                  ? CrossFadeState.showFirst
+                  : (_autoScrollEnabled ? CrossFadeState.showSecond : CrossFadeState.showFirst),
+              firstChild: hasAudio ? _buildAudioSubControls() : SizedBox(height: 38),
+              secondChild: _autoScrollEnabled ? _buildScrollSubControls() : SizedBox(height: 38),
+            ),
+          ],
+        ),
       ),
     );
   }
